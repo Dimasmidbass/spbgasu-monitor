@@ -46,7 +46,7 @@ async def main():
         old=st.get(url)
 #        if old and old!=hh:
 #            await bot.send_message(CHAT_ID,f"🔔 Изменения на странице:\n{title}\n{url}")
-    await bot.send_message(
+await bot.send_message(
     chat_id=CHAT_ID,
     text=f"""✅ Тест
 
@@ -58,7 +58,7 @@ async def main():
 Время проверки прошло успешно.
 """
 )    
-        st[url]=hh
-    save(st)
+st[url]=hh
+save(st)
 
 asyncio.run(main())
