@@ -1,64 +1,67 @@
 import asyncio, hashlib, json, os, re, time
 from pathlib import Path
+
 import cloudscraper
 from bs4 import BeautifulSoup
 from telegram import Bot
-
-PAGES=[
-("Дни открытых дверей","https://www.spbgasu.ru/applicants/dni-otkrytykh-dverey/"),
-("Дизайн архитектурной среды","https://www.spbgasu.ru/applicants/areas-of-training/dizayn-arkhitekturnoy-sredy/")
-]
+from config import TEST_MODE, PAGES
 
 BOT_TOKEN=os.environ["BOT_TOKEN"]
 CHAT_ID=os.environ["CHAT_ID"]
-STATE="state.json"
+STATE_FILE="state.json"
+
 bot=Bot(BOT_TOKEN)
 scraper=cloudscraper.create_scraper()
 
-def load():
-    return json.loads(Path(STATE).read_text(encoding="utf8")) if Path(STATE).exists() else {}
-def save(s):
-    Path(STATE).write_text(json.dumps(s,ensure_ascii=False,indent=2),encoding="utf8")
+def load_state():
+    if Path(STATE_FILE).exists():
+        return json.loads(Path(STATE_FILE).read_text(encoding="utf8"))
+    return {}
 
-def get_text(url):
-    for i in range(5):
+def save_state(s):
+    Path(STATE_FILE).write_text(json.dumps(s,ensure_ascii=False,indent=2),encoding="utf8")
+
+def fetch(url):
+    for _ in range(5):
         try:
-            r=scraper.get(url,timeout=90,headers={"User-Agent":"Mozilla/5.0"})
+            r=scraper.get(url,timeout=60,headers={"User-Agent":"Mozilla/5.0"})
             r.raise_for_status()
             soup=BeautifulSoup(r.text,"lxml")
-            for t in soup(["script","style","noscript"]): t.decompose()
+            for t in soup(["script","style","noscript"]):
+                t.decompose()
             return re.sub(r"\s+"," ",soup.get_text(" ",strip=True))
         except Exception as e:
             print(e)
-            time.sleep(15)
+            time.sleep(10)
     return None
 
-def h(x): return hashlib.sha256(x.encode()).hexdigest()
+def sha(txt):
+    return hashlib.sha256(txt.encode()).hexdigest()
 
 async def main():
-    st=load()
+    if TEST_MODE:
+        await bot.send_message(chat_id=CHAT_ID,
+                               text="✅ Тестовое сообщение.\nGitHub Actions и Telegram работают.")
+        return
+
+    state=load_state()
+
     for title,url in PAGES:
-        text=get_text(url)
+        text=fetch(url)
         if text is None:
-            print("Skip",url)
             continue
-        hh=h(text)
-        old=st.get(url)
-#        if old and old!=hh:
-#            await bot.send_message(CHAT_ID,f"🔔 Изменения на странице:\n{title}\n{url}")
-await bot.send_message(
-    chat_id=CHAT_ID,
-    text=f"""✅ Тест
 
-Бот работает!
+        h=sha(text)
 
-Страница:
-{title}
+        if url in state and state[url]!=h:
+            await bot.send_message(
+                chat_id=CHAT_ID,
+                text=f"🔔 Обнаружены изменения:\n\n{title}\n{url}"
+            )
 
-Время проверки прошло успешно.
-"""
-)    
-st[url]=hh
-save(st)
+        state[url]=h
 
-asyncio.run(main())
+    save_state(state)
+
+if __name__=="__main__":
+    asyncio.run(main())
