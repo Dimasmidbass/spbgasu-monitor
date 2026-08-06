@@ -1,4 +1,4 @@
-requests
+cloudscraper
 beautifulsoup4
 python-telegram-bot==22.3
 lxml
